@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b2e59">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="robots" content="noindex">
+<title>PYC Scanner</title>
+<style>
+  :root { --navy: #0b2e59; --ink: #1a1a1a; --muted: #5f6b7a; --line: #d7dde6; --bg: #f4f6f9; --ok: #1e7b34; --warn: #b26a00; --bad: #b3261e; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; color: var(--ink); background: var(--bg); }
+  header { background: var(--navy); color: #fff; padding: 12px 16px; display: flex; align-items: center; gap: 12px; }
+  header img { height: 34px; background: #fff; border-radius: 6px; padding: 3px 6px; }
+  header .t { font-size: 18px; font-weight: 700; } header .s { font-size: 12px; opacity: .8; }
+  main { max-width: 560px; margin: 0 auto; padding: 12px 14px 40px; }
+  .card { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 14px; margin-bottom: 12px; }
+  label { display: block; font-size: 14px; font-weight: 600; margin: 10px 0 4px; }
+  input, select { width: 100%; padding: 11px 12px; font-size: 16px; border: 1px solid #b9c2cf; border-radius: 7px; background: #fff; font-family: inherit; }
+  button { font-family: inherit; background: var(--navy); color: #fff; border: 0; border-radius: 8px; padding: 12px 16px; font-size: 16px; cursor: pointer; }
+  button.secondary { background: #fff; color: var(--navy); border: 1px solid var(--navy); }
+  button:disabled { opacity: .5; }
+  .row { display: flex; gap: 8px; } .row > * { flex: 1; }
+  .hidden { display: none !important; }
+  .muted { color: var(--muted); font-size: 13px; }
+  .error { color: var(--bad); font-weight: 600; margin-top: 8px; }
+  .modes { display: flex; gap: 8px; } .modes button { flex: 1; background: #fff; color: var(--navy); border: 2px solid var(--line); font-weight: 700; }
+  .modes button.on { border-color: var(--navy); background: #e8eef7; }
+  #cam { position: relative; background: #000; border-radius: 10px; overflow: hidden; min-height: 60px; }
+  #reader { width: 100%; }
+  #reader video { width: 100% !important; height: auto !important; display: block; }
+  #camMsg { color: #fff; text-align: center; padding: 18px; font-size: 14px; }
+  #flash { position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity .25s; }
+  #card { border-radius: 12px; padding: 16px; text-align: center; margin: 12px 0; color: #fff; }
+  #card.ok { background: var(--ok); } #card.warn { background: var(--warn); } #card.bad { background: var(--bad); } #card.info { background: var(--navy); }
+  #card .title { font-size: 15px; opacity: .95; }
+  #card .name { font-size: 26px; font-weight: 800; margin: 2px 0; }
+  #card .big { font-size: 40px; font-weight: 800; line-height: 1.1; }
+  #card .sub { font-size: 14px; opacity: .95; }
+  #card .pay { display: inline-block; margin-top: 8px; background: #fff; color: var(--bad); font-weight: 800; padding: 3px 10px; border-radius: 99px; }
+  #card .acts { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 12px; }
+  #card .acts button { background: #fff; color: var(--ink); font-weight: 700; font-size: 18px; padding: 12px 20px; }
+  #card .acts button.ghost { background: transparent; color: #fff; border: 2px solid rgba(255,255,255,.8); font-size: 15px; padding: 9px 14px; }
+  .dots { font-size: 22px; letter-spacing: 4px; margin-top: 4px; }
+  .stats { display: flex; text-align: center; } .stats div { flex: 1; } .stats b { display: block; font-size: 24px; }
+  .conn { font-size: 13px; padding: 6px 10px; border-radius: 8px; margin-bottom: 10px; }
+  .conn.on { background: #e3f3e7; color: var(--ok); } .conn.off { background: #fff4e0; color: var(--warn); font-weight: 600; }
+  .chk { display: flex; align-items: center; gap: 8px; font-weight: 500; margin: 10px 0 0; } .chk input { width: auto; }
+  .found div.r { display: flex; align-items: center; gap: 8px; margin-top: 8px; } .found div.r > div { flex: 1; }
+</style>
+</head>
+<body>
+<header>
+  <img src="https://lh3.googleusercontent.com/d/19WcHJeNTbwkY54F_jTMqY6FZQVfoTGFS" alt="Parkstone Yacht Club">
+  <div><div class="t" id="hTitle">Scanner</div><div class="s">Parkstone Yacht Club events</div></div>
+</header>
+<main>
+  <!-- sign in -->
+  <div id="login" class="card">
+    <label style="margin-top:0">What are you doing?</label>
+    <div class="modes"><button type="button" id="mDoor" onclick="setMode('door')">Door check-in</button><button type="button" id="mBar" onclick="setMode('bar')">Bar vouchers</button></div>
+    <label for="pin" id="pinLabel">PIN</label>
+    <input id="pin" type="password" inputmode="numeric" autocomplete="off">
+    <div id="loginErr" class="error"></div>
+    <p style="margin-bottom:0"><button onclick="login()" style="width:100%">Start</button></p>
+  </div>
+
+  <div id="app" class="hidden">
+    <div id="conn" class="conn on">Online</div>
+    <div class="card" style="padding:10px 14px">
+      <div class="row" style="align-items:flex-end">
+        <div style="flex:2"><label for="evSel" style="margin-top:0">Event</label><select id="evSel" onchange="pickEvent()"></select></div>
+      </div>
+      <div id="evNote" class="muted hidden" style="margin-top:6px"></div>
+    </div>
+
+    <div id="cam"><div id="reader"></div><div id="camMsg">Starting camera…</div><div id="flash"></div></div>
+    <div class="row" style="margin-top:8px">
+      <select id="camSel" onchange="switchCam()" aria-label="Camera"></select>
+      <button class="secondary" id="camBtn" onclick="toggleCam()" style="flex:0 0 auto">Pause</button>
+    </div>
+
+    <div id="card" class="hidden"></div>
+
+    <div class="card">
+      <label for="code" style="margin-top:0">Or type / use a handheld scanner</label>
+      <div class="row"><input id="code" autocomplete="off" autocapitalize="characters" placeholder="PYC-XXXXXX"><button onclick="submitCode()" style="flex:0 0 auto">Go</button></div>
+      <label class="chk hidden" id="fastWrap"><input type="checkbox" id="fast"> Use a voucher as soon as it’s scanned (busy bar)</label>
+      <label for="find">Find by name</label>
+      <input id="find" placeholder="Type a surname…" oninput="findName()" autocomplete="off">
+      <div id="found" class="found"></div>
+    </div>
+
+    <div class="card stats">
+      <div><b id="s1">–</b><span class="muted" id="s1l"></span></div>
+      <div><b id="s2">–</b><span class="muted" id="s2l"></span></div>
+      <div><b id="sQ">0</b><span class="muted">Waiting to sync</span></div>
+    </div>
+    <p class="muted">Keep this page open. If the Wi-Fi drops it keeps working from the saved list and syncs when you’re back online.</p>
+    <p style="text-align:center"><button class="secondary" onclick="logout()">Lock / switch mode</button></p>
+  </div>
+</main>
+
+<!-- html5-qrcode 2.3.8 (Apache-2.0, github.com/mebjas/html5-qrcode) – stored alongside this page -->
+<script src="html5-qrcode.min.js"></script>
+<script>
+  /* The PYC Event Portal web app. Change this only if the portal gets a new deployment address. */
+  const API = 'https://script.google.com/macros/s/AKfycbwcIZubItvIaGVtsH0ZaD0HXJqBUwMnOZIglg9mMvqmlnqqcQImPcf1md77yKk13UeF/exec';
+
+  const $ = id => document.getElementById(id);
+  function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) { return null; } }
+  function readJson(k) { try { return JSON.parse(store(k) || 'null'); } catch (e) { return null; } }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+  function opId() { return 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
+  function ticketFrom(raw) { const m = String(raw).match(/[?&]t=([^&#]+)/); return decodeURIComponent(m ? m[1] : String(raw).trim()).toUpperCase(); }
+
+  class NetErr extends Error {}
+  async function call(fn, ...args) {
+    let res;
+    try {
+      res = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ fn: fn, args: args }), redirect: 'follow' });
+    } catch (e) { throw new NetErr('Offline'); }
+    if (!res.ok) throw new NetErr('Server ' + res.status);
+    let data; try { data = await res.json(); } catch (e) { throw new NetErr('Bad response'); }
+    if (!data.ok) throw new Error(data.err || 'Error');
+    return data.val;
+  }
+
+  let MODE = store('pycScanMode') || 'door', PIN = store('pycScanPin') || '', EVENT = '', EVENTS = [];
+  let cache = { eventId: '', list: [] }, queue = [], cur = null, busy = false;
+  const K = () => ({ pin: 'pycScanPin', ev: 'pycScan_' + MODE + '_ev', cache: 'pycScan_' + MODE + '_cache', queue: 'pycScan_' + MODE + '_queue' });
+
+  function setMode(m) {
+    MODE = m; store('pycScanMode', m);
+    $('mDoor').classList.toggle('on', m === 'door'); $('mBar').classList.toggle('on', m === 'bar');
+    $('pinLabel').textContent = m === 'bar' ? 'Bar PIN (or door PIN)' : 'Door PIN';
+    $('hTitle').textContent = m === 'bar' ? 'Bar – drink vouchers' : 'Door check-in';
+  }
+  setMode(MODE);
+  $('fast').checked = store('pycScanFast') === '1';
+  $('fast').addEventListener('change', () => store('pycScanFast', $('fast').checked ? '1' : null));
+
+  function setOnline(v) { $('conn').className = 'conn ' + (v ? 'on' : 'off'); $('conn').textContent = v ? 'Online' : 'Offline – using the saved list. Will sync automatically.'; }
+  function saveCache() { store(K().cache, JSON.stringify(cache)); }
+  function saveQueue() { store(K().queue, JSON.stringify(queue)); $('sQ').textContent = queue.length; }
+
+  /* ---------- sign in & events ---------- */
+  async function login(p) {
+    PIN = p || $('pin').value.trim();
+    cache = readJson(K().cache) || { eventId: '', list: [] }; queue = readJson(K().queue) || []; EVENT = store(K().ev) || '';
+    $('loginErr').textContent = '';
+    try {
+      EVENTS = await call(MODE === 'bar' ? 'getBarEvents' : 'getCheckinEvents', PIN);
+      store(K().pin, PIN);
+      showApp();
+      $('evSel').innerHTML = EVENTS.length ? EVENTS.map(e => `<option value="${esc(e.id)}">${esc(e.name)} – ${esc(e.date)}${e.today ? ' (today)' : ''}</option>`).join('') : '<option value="">No upcoming events</option>';
+      const pick = EVENTS.find(e => e.id === EVENT) || EVENTS.find(e => e.today) || EVENTS[0];
+      if (pick) $('evSel').value = pick.id;
+      pickEvent();
+    } catch (e) {
+      if (e instanceof NetErr && PIN && cache.list.length) {
+        showApp(); $('evSel').innerHTML = `<option value="${esc(cache.eventId)}">${esc(cache.event)} (saved list)</option>`;
+        EVENT = cache.eventId; setOnline(false); stats(); return;
+      }
+      store(K().pin, null);
+      $('loginErr').textContent = e instanceof NetErr ? 'Can’t reach the portal – check the internet connection.' : e.message;
+    }
+  }
+  function showApp() {
+    $('login').classList.add('hidden'); $('app').classList.remove('hidden');
+    $('fastWrap').classList.toggle('hidden', MODE !== 'bar');
+    $('s1l').textContent = MODE === 'bar' ? 'Vouchers used' : 'Checked in';
+    $('s2l').textContent = MODE === 'bar' ? 'Given out' : 'Booked';
+    startCam();
+  }
+  function logout() {
+    if (queue.length && !confirm(queue.length + ' scan(s) haven’t synced yet. Lock anyway? They stay saved on this device.')) return;
+    store(K().pin, null); location.reload();
+  }
+  if (PIN) login(PIN);
+  $('pin').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
+
+  function pickEvent() {
+    EVENT = $('evSel').value; store(K().ev, EVENT);
+    const ev = EVENTS.find(e => e.id === EVENT);
+    $('evNote').classList.toggle('hidden', !(MODE === 'bar' && ev && ev.note));
+    $('evNote').textContent = ev && ev.note ? 'Vouchers cover: ' + ev.note : '';
+    $('card').classList.add('hidden');
+    refresh();
+  }
+  async function refresh() {
+    if (!EVENT) return;
+    try {
+      await sync();
+      const d = await call(MODE === 'bar' ? 'getBarData' : 'getCheckinData', PIN, EVENT);
+      cache = { eventId: EVENT, event: d.event, list: d.list };
+      queue.forEach(q => applyLocal(q));
+      saveCache(); setOnline(true); stats();
+    } catch (e) { if (e instanceof NetErr) { setOnline(false); stats(); } }
+  }
+  setInterval(refresh, 60000);
+  setInterval(() => { if (queue.length) sync().then(stats).catch(() => {}); }, 20000);
+  async function sync() {
+    if (!queue.length) return;
+    const items = queue.slice();
+    await call(MODE === 'bar' ? 'barRedeemBatch' : 'checkInBatch', PIN, items);
+    queue = queue.filter(q => !items.includes(q)); saveQueue(); setOnline(true);
+  }
+  function localGuest(t) { return cache.eventId === EVENT ? cache.list.find(g => g.ticketId === t) : null; }
+  function applyLocal(q) {
+    const g = localGuest(q.t); if (!g) return;
+    if (MODE === 'bar') { if ((g.ops || []).includes(q.id)) return; g.used++; g.left = Math.max(0, g.allowance - g.used); if (q.ci) g.checkedIn = true; }
+    else g.checkedIn = true;
+  }
+  function stats() {
+    const act = cache.eventId === EVENT ? cache.list.filter(g => !g.cancelled && !g.waitlisted) : [];
+    if (MODE === 'bar') { $('s1').textContent = act.reduce((n, g) => n + g.used, 0); $('s2').textContent = act.reduce((n, g) => n + g.allowance, 0); }
+    else { $('s1').textContent = act.filter(g => g.checkedIn).length; $('s2').textContent = act.length; }
+    $('sQ').textContent = queue.length;
+  }
+
+  /* ---------- camera (continuous) ---------- */
+  let scanner = null, camOn = false, lastText = '', lastAt = 0, holdUntil = 0;
+  async function startCam(deviceId) {
+    if (typeof Html5Qrcode === 'undefined') { $('camMsg').textContent = 'Scanner couldn’t load – check the internet connection and reload.'; return; }
+    try {
+      if (!scanner) scanner = new Html5Qrcode('reader', { formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE], verbose: false });
+      const cams = await Html5Qrcode.getCameras().catch(() => []);
+      if (cams.length) {
+        const saved = deviceId || store('pycScanCam');
+        $('camSel').innerHTML = cams.map((c, i) => `<option value="${esc(c.id)}">${esc(c.label || 'Camera ' + (i + 1))}</option>`).join('');
+        const back = cams.find(c => /back|rear|environment/i.test(c.label));
+        const pick = cams.find(c => c.id === saved) || back || cams[cams.length - 1];
+        $('camSel').value = pick.id; deviceId = pick.id;
+      } else $('camSel').innerHTML = '<option>Default camera</option>';
+      const box = w => { const s = Math.floor(Math.min(w.width, w.height) * 0.7); return { width: s, height: s }; };
+      await scanner.start(deviceId ? { deviceId: { exact: deviceId } } : { facingMode: 'environment' }, { fps: 12, qrbox: box, aspectRatio: 1.333 }, onScan, () => {});
+      camOn = true; $('camMsg').classList.add('hidden'); $('camBtn').textContent = 'Pause';
+    } catch (e) {
+      camOn = false; $('camMsg').classList.remove('hidden');
+      const n = String((e && e.name) || '') + ' ' + String((e && e.message) || e || '');
+      $('camMsg').innerHTML = /NotAllowed|Permission|denied/i.test(n)
+        ? 'Camera permission was refused. Tap the padlock (or ⓘ) next to the web address → Camera → Allow, then reload.'
+        : /NotFound|Overconstrained|not found/i.test(n) ? 'No camera found – plug in a webcam or use a handheld scanner.' : 'Camera couldn’t start: ' + esc(n.trim());
+    }
+  }
+  async function stopCam() { if (scanner && camOn) { try { await scanner.stop(); } catch (e) {} } camOn = false; }
+  async function toggleCam() {
+    if (camOn) { await stopCam(); $('camBtn').textContent = 'Resume'; $('camMsg').classList.remove('hidden'); $('camMsg').textContent = 'Camera paused.'; }
+    else startCam($('camSel').value);
+  }
+  async function switchCam() { store('pycScanCam', $('camSel').value); await stopCam(); startCam($('camSel').value); }
+  function onScan(text) {
+    const now = Date.now();
+    if (now < holdUntil) return;
+    // Same code still in view: ignore it until it has been out of view for 3 seconds.
+    if (text === lastText && now - lastAt < 3000) { lastAt = now; return; }
+    lastText = text; lastAt = now; holdUntil = now + 1200;
+    flash('#fff');
+    handle(text);
+  }
+  function flash(col) { const f = $('flash'); f.style.background = col; f.style.opacity = .5; setTimeout(() => f.style.opacity = 0, 180); }
+
+  /* ---------- actions ---------- */
+  $('code').addEventListener('keydown', e => { if (e.key === 'Enter') submitCode(); });
+  function submitCode() { const v = $('code').value.trim(); $('code').value = ''; if (v) handle(v); $('code').focus(); }
+  function handle(raw) { const t = ticketFrom(raw); return MODE === 'bar' ? ($('fast').checked ? serve(t, false) : lookup(t)) : checkIn(t); }
+
+  function card(cls, title, name, sub, acts, big, extra) {
+    const el = $('card'); el.className = cls;
+    el.innerHTML = `<div class="title">${esc(title)}</div><div class="name">${esc(name)}</div>` + (big ? `<div class="big">${esc(big)}</div>` : '') +
+      (extra || '') + (sub ? `<div class="sub">${esc(sub)}</div>` : '') + (acts ? `<div class="acts">${acts}</div>` : '');
+    el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
+  function beep(freq) { try { const ctx = new (window.AudioContext || window.webkitAudioContext)(); const o = ctx.createOscillator(); o.frequency.value = freq; o.connect(ctx.destination); o.start(); o.stop(ctx.currentTime + 0.15); } catch (e) {} if (navigator.vibrate) navigator.vibrate(freq > 500 ? 60 : [80, 60, 80]); }
+
+  /* door */
+  async function checkIn(t) {
+    if (busy) return; busy = true;
+    card('info', 'Checking…', '', '', '');
+    try {
+      const r = await call('checkIn', t, PIN); setOnline(true); doorResult(r);
+      const g = localGuest(r.ticketId); if (g && r.ok) { g.checkedIn = true; saveCache(); } stats();
+    } catch (e) {
+      if (e instanceof NetErr) { setOnline(false); doorOffline(t); } else { card('bad', e.message, '', '', ''); beep(220); }
+    }
+    busy = false;
+  }
+  function doorOffline(t) {
+    const g = localGuest(t);
+    if (!g) { card('bad', 'Not on the saved list', t, 'Check the event, or try again when online.', ''); beep(220); return; }
+    if (g.cancelled) { card('bad', 'Ticket was cancelled', g.name, '', ''); beep(220); return; }
+    if (g.waitlisted) { card('bad', 'On the waiting list – no confirmed place', g.name, '', ''); beep(220); return; }
+    if (g.checkedIn) { doorResult(Object.assign({}, g, { ok: true, already: true, message: 'Already checked in' })); return; }
+    g.checkedIn = true; queue.push({ t: t, at: new Date().toISOString() }); saveQueue(); saveCache(); stats();
+    doorResult(Object.assign({}, g, { ok: true, already: false, message: 'Checked in (offline – will sync)' }));
+  }
+  function doorResult(r) {
+    const diet = r.dietary && r.dietary !== 'None' ? 'Dietary: ' + r.dietary : '';
+    const sub = [r.event, r.bookedBy ? 'Guest of ' + r.bookedBy : '', r.club, diet, r.notes].filter(Boolean).join(' · ');
+    const pay = r.unpaid ? '<div class="pay">PAYMENT DUE</div>' : '';
+    if (!r.ok) { card('bad', r.message, r.name || '', sub, ''); beep(220); }
+    else if (r.already) { card('warn', r.message, r.name, sub, '', '', pay); beep(440); }
+    else { card('ok', r.message === 'Checked in' ? 'Welcome' : r.message, r.name, sub, '', '', pay); beep(880); }
+  }
+
+  /* bar */
+  function dots(g) { return '<div class="dots">' + '●'.repeat(Math.min(g.used, 20)) + '○'.repeat(Math.min(g.left, 20)) + '</div>'; }
+  function updateLocal(r) {
+    if (cache.eventId !== r.eventId) return;
+    const i = cache.list.findIndex(g => g.ticketId === r.ticketId);
+    const g = Object.assign({}, r); delete g.ok; delete g.message; delete g.found; delete g.needCheckIn;
+    queue.filter(q => q.t === r.ticketId && !(r.ops || []).includes(q.id)).forEach(() => g.used++);
+    g.left = Math.max(0, g.allowance - g.used);
+    if (i > -1) cache.list[i] = g; else cache.list.push(g);
+    saveCache(); stats();
+  }
+  function barShow(g, msg, lastOp) {
+    if (g.cancelled) { card('bad', 'Ticket was cancelled', g.name, '', ''); beep(220); return; }
+    if (g.waitlisted) { card('bad', 'On the waiting list – no confirmed place', g.name, '', ''); beep(220); return; }
+    const used = g.times && g.times.length ? 'Used at ' + g.times.join(', ') : '';
+    const undo = lastOp ? `<button class="ghost" onclick="undo('${esc(lastOp)}')">Undo</button>` : '';
+    if (!g.allowance) { card('bad', 'No drink vouchers on this ticket', g.name, '', undo); beep(220); return; }
+    if (!g.checkedIn && !lastOp) { card('warn', 'Not checked in at the door yet', g.name, `${g.left} of ${g.allowance} vouchers left`, `<button onclick="serve('${esc(g.ticketId)}', true)">Check in &amp; serve</button>`); beep(440); return; }
+    if (!g.left) { card('bad', msg || 'All vouchers used', g.name, used, undo, '', dots(g)); beep(220); return; }
+    card(msg ? 'ok' : 'info', msg || 'Voucher available', g.name, used, `<button onclick="serve('${esc(g.ticketId)}', false)">Serve 1 drink</button>${undo}`, `${g.left} of ${g.allowance} left`, dots(g));
+    if (msg) beep(880);
+  }
+  async function lookup(t) {
+    if (busy) return; busy = true;
+    try {
+      const r = await call('barLookup', PIN, t); setOnline(true);
+      if (!r.found) { card('bad', 'Ticket not found', t, '', ''); beep(220); } else { updateLocal(r); cur = r; barShow(r); }
+    } catch (e) {
+      if (e instanceof NetErr) { setOnline(false); const g = localGuest(t); if (g) { cur = g; barShow(g); } else { card('bad', 'Not on the saved list', t, 'Check the event, or try again when online.', ''); beep(220); } }
+      else { card('bad', e.message, '', '', ''); beep(220); }
+    }
+    busy = false;
+  }
+  async function serve(t, checkInToo) {
+    if (busy) return; busy = true;
+    const id = opId();
+    try {
+      const r = await call('barRedeem', PIN, t, id, !!checkInToo); setOnline(true);
+      if (!r.found) { card('bad', 'Ticket not found', t, '', ''); beep(220); }
+      else { updateLocal(r); cur = r;
+        if (r.ok) barShow(r, `Voucher used – ${r.left} left`, id);
+        else if (r.needCheckIn) barShow(r);
+        else { card('bad', r.message, r.name, (r.times || []).length ? 'Used at ' + r.times.join(', ') : '', ''); beep(220); } }
+    } catch (e) {
+      if (e instanceof NetErr) { setOnline(false); serveOffline(t, id, checkInToo); } else { card('bad', e.message, '', '', ''); beep(220); }
+    }
+    busy = false;
+  }
+  function serveOffline(t, id, ci) {
+    const g = localGuest(t);
+    if (!g) { card('bad', 'Not on the saved list', t, 'Check the event, or try again when online.', ''); beep(220); return; }
+    if (g.cancelled || g.waitlisted || !g.allowance || (!g.checkedIn && !ci) || g.left <= 0) { cur = g; barShow(g); return; }
+    if (ci) g.checkedIn = true;
+    g.used++; g.left = Math.max(0, g.allowance - g.used); g.times = (g.times || []).concat(new Date().toTimeString().slice(0, 5));
+    queue.push({ t: t, id: id, at: new Date().toISOString(), ci: !!ci }); saveQueue(); saveCache(); stats();
+    cur = g; barShow(g, `Voucher used (offline) – ${g.left} left`, id);
+  }
+  async function undo(id) {
+    if (!cur || busy) return; busy = true;
+    const qi = queue.findIndex(q => q.id === id);
+    try {
+      if (qi > -1) { queue.splice(qi, 1); saveQueue(); const g = localGuest(cur.ticketId); if (g) { g.used = Math.max(0, g.used - 1); g.left = Math.max(0, g.allowance - g.used); g.times = (g.times || []).slice(0, -1); saveCache(); cur = g; } }
+      else { const r = await call('barUndo', PIN, cur.ticketId, id); updateLocal(r); cur = r; }
+      stats(); card('info', 'Voucher given back', cur.name, '', `<button onclick="serve('${esc(cur.ticketId)}', false)">Serve 1 drink</button>`, `${cur.left} of ${cur.allowance} left`);
+    } catch (e) { card('bad', e instanceof NetErr ? 'Can’t undo while offline' : e.message, cur.name, '', ''); }
+    busy = false;
+  }
+
+  function findName() {
+    const q = $('find').value.trim().toLowerCase();
+    if (q.length < 2) { $('found').innerHTML = ''; return; }
+    const hits = (cache.eventId === EVENT ? cache.list : []).filter(g => g.name.toLowerCase().includes(q)).slice(0, 8);
+    $('found').innerHTML = hits.map(g => `<div class="r"><div>${esc(g.name)} <span class="muted">${g.cancelled ? '(cancelled)' : g.waitlisted ? '(waiting list)' :
+      MODE === 'bar' ? g.left + ' of ' + g.allowance + ' left' : g.checkedIn ? '(checked in)' : ''}</span></div>
+      <button class="secondary" onclick="${MODE === 'bar' ? 'lookup' : 'checkIn'}('${esc(g.ticketId)}');$('find').value='';findName()">${MODE === 'bar' ? 'Open' : 'Check in'}</button></div>`).join('') || '<p class="muted">No match on the saved list.</p>';
+  }
+  saveQueue();
+</script>
+</body>
+</html>
