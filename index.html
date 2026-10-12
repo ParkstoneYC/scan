@@ -77,7 +77,7 @@
 
     <div id="cam"><div id="reader"></div><div id="camMsg">Starting camera…</div><div id="flash"></div></div>
     <div class="row" style="margin-top:8px">
-      <select id="camSel" onchange="switchCam()" aria-label="Camera"></select>
+      <select id="camSel" onchange="switchCam()" aria-label="Camera"><option value="">Automatic (rear camera)</option></select>
       <button class="secondary" id="camBtn" onclick="toggleCam()" style="flex:0 0 auto">Pause</button>
     </div>
 
@@ -220,37 +220,65 @@
     $('sQ').textContent = queue.length;
   }
 
-  /* ---------- camera (continuous) ---------- */
-  let scanner = null, camOn = false, lastText = '', lastAt = 0, holdUntil = 0;
-  async function startCam(deviceId) {
-    if (typeof Html5Qrcode === 'undefined') { $('camMsg').textContent = 'Scanner couldn’t load – check the internet connection and reload.'; return; }
+  /* ---------- camera (continuous) ----------
+   * Starts with the phone's main rear camera (facingMode) – reliable on iPhone and Android.
+   * Restarts itself after the screen locks, an app switch, a phone call, or if the camera feed drops.
+   */
+  let scanner = null, camOn = false, starting = false, userPaused = false, chosenCam = '', lastText = '', lastAt = 0, holdUntil = 0;
+  const box = w => { const s = Math.floor(Math.min(w.width, w.height) * 0.7); return { width: s, height: s }; };
+  function camMsg(html, retry) {
+    $('camMsg').classList.remove('hidden');
+    $('camMsg').innerHTML = html + (retry ? '<div style="margin-top:10px"><button type="button" onclick="userPaused=false;startCam()">Start camera</button></div>' : '');
+  }
+  async function startCam() {
+    if (typeof Html5Qrcode === 'undefined') { camMsg('Scanner couldn’t load – check the internet connection and reload.'); return; }
+    if (starting) return; starting = true;
     try {
-      if (!scanner) scanner = new Html5Qrcode('reader', { formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE], verbose: false });
-      const cams = await Html5Qrcode.getCameras().catch(() => []);
-      if (cams.length) {
-        const saved = deviceId || store('pycScanCam');
-        $('camSel').innerHTML = cams.map((c, i) => `<option value="${esc(c.id)}">${esc(c.label || 'Camera ' + (i + 1))}</option>`).join('');
-        const back = cams.find(c => /back|rear|environment/i.test(c.label));
-        const pick = cams.find(c => c.id === saved) || back || cams[cams.length - 1];
-        $('camSel').value = pick.id; deviceId = pick.id;
-      } else $('camSel').innerHTML = '<option>Default camera</option>';
-      const box = w => { const s = Math.floor(Math.min(w.width, w.height) * 0.7); return { width: s, height: s }; };
-      await scanner.start(deviceId ? { deviceId: { exact: deviceId } } : { facingMode: 'environment' }, { fps: 12, qrbox: box, aspectRatio: 1.333 }, onScan, () => {});
+      if (!scanner) scanner = new Html5Qrcode('reader', { formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE], verbose: false,
+        experimentalFeatures: { useBarCodeDetectorIfSupported: true } });
+      if (camOn || scanner.isScanning) { try { await scanner.stop(); } catch (e) {} camOn = false; }
+      const cfg = { fps: 15, qrbox: box };
+      let started = false;
+      if (chosenCam) { try { await scanner.start({ deviceId: { exact: chosenCam } }, cfg, onScan, () => {}); started = true; } catch (e) { chosenCam = ''; } }
+      if (!started) await scanner.start({ facingMode: 'environment' }, cfg, onScan, () => {});
       camOn = true; $('camMsg').classList.add('hidden'); $('camBtn').textContent = 'Pause';
+      fillCams();
     } catch (e) {
-      camOn = false; $('camMsg').classList.remove('hidden');
+      camOn = false;
       const n = String((e && e.name) || '') + ' ' + String((e && e.message) || e || '');
-      $('camMsg').innerHTML = /NotAllowed|Permission|denied/i.test(n)
-        ? 'Camera permission was refused. Tap the padlock (or ⓘ) next to the web address → Camera → Allow, then reload.'
-        : /NotFound|Overconstrained|not found/i.test(n) ? 'No camera found – plug in a webcam or use a handheld scanner.' : 'Camera couldn’t start: ' + esc(n.trim());
-    }
+      camMsg(/NotAllowed|Permission|denied/i.test(n)
+        ? 'Camera permission was refused. Tap the <b>aA</b> or padlock next to the web address → Camera → <b>Allow</b>. (iPhone: Settings → Safari → Camera → Allow stops it asking every time.)'
+        : /NotFound|Overconstrained|not found/i.test(n) ? 'No camera found – plug in a webcam or use a handheld scanner.'
+        : /NotReadable|in use|Could not start|TrackStart/i.test(n) ? 'The camera is busy – close other apps using it (e.g. the camera app or a video call).'
+        : 'Camera couldn’t start: ' + esc(n.trim()), true);
+    } finally { starting = false; }
   }
-  async function stopCam() { if (scanner && camOn) { try { await scanner.stop(); } catch (e) {} } camOn = false; }
+  // Camera list (names are only available once permission is given). "Automatic" = main rear camera.
+  async function fillCams() {
+    const cams = await Html5Qrcode.getCameras().catch(() => []);
+    $('camSel').innerHTML = '<option value="">Automatic (rear camera)</option>' +
+      cams.map((c, i) => `<option value="${esc(c.id)}">${esc(c.label || 'Camera ' + (i + 1))}</option>`).join('');
+    $('camSel').value = cams.some(c => c.id === chosenCam) ? chosenCam : '';
+  }
+  async function stopCam() { if (scanner && (camOn || scanner.isScanning)) { try { await scanner.stop(); } catch (e) {} } camOn = false; }
   async function toggleCam() {
-    if (camOn) { await stopCam(); $('camBtn').textContent = 'Resume'; $('camMsg').classList.remove('hidden'); $('camMsg').textContent = 'Camera paused.'; }
-    else startCam($('camSel').value);
+    if (camOn) { userPaused = true; await stopCam(); $('camBtn').textContent = 'Resume'; camMsg('Camera paused.'); }
+    else { userPaused = false; startCam(); }
   }
-  async function switchCam() { store('pycScanCam', $('camSel').value); await stopCam(); startCam($('camSel').value); }
+  async function switchCam() { chosenCam = $('camSel').value; userPaused = false; startCam(); }
+  // Release the camera when the page is hidden; start it again when it comes back.
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { if (camOn) stopCam(); }
+    else if (!userPaused && $('app') && !$('app').classList.contains('hidden')) startCam();
+  });
+  window.addEventListener('pageshow', e => { if (e.persisted && !userPaused && !$('app').classList.contains('hidden')) startCam(); });
+  // Watchdog: if the feed has stopped (iOS sometimes kills it), restart it.
+  setInterval(() => {
+    if (userPaused || starting || document.hidden || $('app').classList.contains('hidden')) return;
+    const v = document.querySelector('#reader video');
+    const t = v && v.srcObject && v.srcObject.getVideoTracks ? v.srcObject.getVideoTracks()[0] : null;
+    if (camOn && (!v || !t || t.readyState === 'ended' || t.muted && v.paused)) { camOn = false; startCam(); }
+  }, 3000);
   function onScan(text) {
     const now = Date.now();
     if (now < holdUntil) return;
@@ -298,7 +326,7 @@
   }
   function doorResult(r) {
     const diet = r.dietary && r.dietary !== 'None' ? 'Dietary: ' + r.dietary : '';
-    const sub = [r.event, r.bookedBy ? 'Guest of ' + r.bookedBy : '', r.club, diet, r.notes].filter(Boolean).join(' · ');
+    const sub = [r.event, r.guestType, r.bookedBy ? 'Guest of ' + r.bookedBy : '', r.club, diet, r.notes, r.access ? 'Access: ' + r.access : ''].filter(Boolean).join(' · ');
     const pay = r.unpaid ? '<div class="pay">PAYMENT DUE</div>' : '';
     if (!r.ok) { card('bad', r.message, r.name || '', sub, ''); beep(220); }
     else if (r.already) { card('warn', r.message, r.name, sub, '', '', pay); beep(440); }
